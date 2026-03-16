@@ -682,6 +682,59 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
 
 /* --- Signing ------------------------------------------------------------- */
 
+/*
+ * Convert a DER-encoded ECDSA-Sig-Value to flat r||s format.
+ * PKCS#11 CKM_ECDSA requires the signature as r || s, each
+ * zero-padded to the curve order size (32 bytes for P-256).
+ *
+ * DER layout: 30 <len> 02 <rlen> <r> 02 <slen> <s>
+ */
+static int der_ecdsa_to_flat(const uint8_t *der, size_t der_len,
+                            uint8_t *flat, size_t flat_max, size_t *flat_len)
+{
+    const size_t int_sz = 32; /* P-256 order size */
+    if (flat_max < int_sz * 2)
+        return -1;
+
+    size_t pos = 0;
+    /* SEQUENCE */
+    if (pos >= der_len || der[pos] != 0x30) return -1;
+    pos++;
+    if (pos >= der_len) return -1;
+    /* Skip SEQUENCE length */
+    if (der[pos] & 0x80) {
+        size_t ll = der[pos] & 0x7f;
+        pos += 1 + ll;
+    } else {
+        pos++;
+    }
+
+    memset(flat, 0, int_sz * 2);
+
+    for (int i = 0; i < 2; i++) {
+        if (pos >= der_len || der[pos] != 0x02) return -1;
+        pos++;
+        if (pos >= der_len) return -1;
+        size_t ilen = der[pos]; pos++;
+        if (pos + ilen > der_len) return -1;
+
+        const uint8_t *val = der + pos;
+        size_t vlen = ilen;
+        /* Skip leading zero padding byte (sign byte) */
+        if (vlen > int_sz && val[0] == 0x00) {
+            val++;
+            vlen--;
+        }
+        if (vlen > int_sz) return -1;
+        /* Right-align into the 32-byte field */
+        memcpy(flat + i * int_sz + (int_sz - vlen), val, vlen);
+        pos += ilen;
+    }
+
+    *flat_len = int_sz * 2;
+    return 0;
+}
+
 CK_RV C_SignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM *pMechanism, CK_OBJECT_HANDLE hKey)
 {
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
@@ -730,35 +783,43 @@ CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE *pData, CK_ULONG ulDataLen,
     }
     memcpy(hash, pData, 32);
 
-    /* Query output size */
+    /* CKM_ECDSA P-256: signature is flat r||s = 64 bytes */
     if (!pSignature) {
-        /* ECDSA P-256 signature is at most 72 bytes (DER), or 64 bytes (r||s) */
-        *pulSignatureLen = RPI_FW_CRYPTO_ECDSA_RESP_MAX_SIZE;
+        *pulSignatureLen = 64;
         return CKR_OK;
     }
 
-    uint8_t sig_buf[RPI_FW_CRYPTO_ECDSA_RESP_MAX_SIZE];
-    size_t sig_len = 0;
+    uint8_t der_buf[RPI_FW_CRYPTO_ECDSA_RESP_MAX_SIZE];
+    size_t der_len = 0;
 
     DBG("C_Sign: calling ecdsa_sign key[%u] fw_id=%u len=%lu",
         g_sign.key_id, g_keys[g_sign.key_id].fw_key_id, ulDataLen);
     rc = rpi_fw_crypto_ecdsa_sign(0, g_keys[g_sign.key_id].fw_key_id, hash, 32,
-                                  sig_buf, sizeof(sig_buf), &sig_len);
+                                  der_buf, sizeof(der_buf), &der_len);
     g_sign.active = CK_FALSE;
 
     if (rc != 0) {
         DBG("C_Sign: ecdsa_sign failed rc=%d", rc);
         return CKR_DEVICE_ERROR;
     }
-    DBG("C_Sign: signature %zu bytes", sig_len);
+    DBG("C_Sign: firmware returned %zu bytes (DER)", der_len);
 
-    if (*pulSignatureLen < (CK_ULONG)sig_len) {
-        *pulSignatureLen = (CK_ULONG)sig_len;
+    /* Convert DER-encoded ECDSA signature to flat r||s */
+    uint8_t flat_sig[64];
+    size_t flat_len = 0;
+    if (der_ecdsa_to_flat(der_buf, der_len, flat_sig, sizeof(flat_sig), &flat_len) != 0) {
+        DBG("C_Sign: DER to flat r||s conversion failed");
+        return CKR_DEVICE_ERROR;
+    }
+    DBG("C_Sign: flat r||s signature %zu bytes", flat_len);
+
+    if (*pulSignatureLen < (CK_ULONG)flat_len) {
+        *pulSignatureLen = (CK_ULONG)flat_len;
         return CKR_BUFFER_TOO_SMALL;
     }
 
-    memcpy(pSignature, sig_buf, sig_len);
-    *pulSignatureLen = (CK_ULONG)sig_len;
+    memcpy(pSignature, flat_sig, flat_len);
+    *pulSignatureLen = (CK_ULONG)flat_len;
     return CKR_OK;
 }
 
