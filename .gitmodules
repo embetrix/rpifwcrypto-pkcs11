@@ -1,0 +1,3 @@
+[submodule "3rdparty/raspi-utils"]
+	path = 3rdparty/raspi-utils
+	url = https://github.com/raspberrypi/utils

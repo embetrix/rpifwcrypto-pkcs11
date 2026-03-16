@@ -1,0 +1,5 @@
+# p11-kit module configuration for rpifwcrypto PKCS#11
+# Install to: /usr/share/p11-kit/modules/rpifwcrypto.module
+
+module: rpifwcrypto-pkcs11.so
+critical: no
