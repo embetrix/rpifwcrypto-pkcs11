@@ -23,6 +23,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <pthread.h>
 #include "pkcs11_types.h"
 #include "pkcs11_funcs.h"
 #include <rpifwcrypto.h>
@@ -50,6 +51,7 @@ static const char *ckr_str(CK_RV rv)
     switch (rv) {
     case CKR_OK:                       return "CKR_OK";
     case CKR_ARGUMENTS_BAD:            return "CKR_ARGUMENTS_BAD";
+    case CKR_CANT_LOCK:                return "CKR_CANT_LOCK";
     case CKR_ATTRIBUTE_TYPE_INVALID:   return "CKR_ATTRIBUTE_TYPE_INVALID";
     case CKR_BUFFER_TOO_SMALL:         return "CKR_BUFFER_TOO_SMALL";
     case CKR_CRYPTOKI_NOT_INITIALIZED: return "CKR_CRYPTOKI_NOT_INITIALIZED";
@@ -70,6 +72,34 @@ static const char *ckr_str(CK_RV rv)
 
 static CK_BBOOL g_initialized = CK_FALSE;
 static int g_num_keys = 0;
+static pthread_mutex_t g_state_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static CK_RV module_lock(void)
+{
+    return pthread_mutex_lock(&g_state_lock) == 0 ? CKR_OK : CKR_CANT_LOCK;
+}
+
+static void module_unlock(void)
+{
+    (void)pthread_mutex_unlock(&g_state_lock);
+}
+
+typedef int module_lock_guard;
+
+static void module_lock_guard_release(module_lock_guard *guard)
+{
+    if (*guard)
+        module_unlock();
+}
+
+#define MODULE_GUARD() \
+    module_lock_guard _module_guard __attribute__((cleanup(module_lock_guard_release))) = 0; \
+    do { \
+        CK_RV _lock_rv = module_lock(); \
+        if (_lock_rv != CKR_OK) \
+            return _lock_rv; \
+        _module_guard = 1; \
+    } while (0)
 
 /* We support one slot (0), one session at a time */
 #define SLOT_ID         0
@@ -221,7 +251,27 @@ static int ensure_pubkey(int idx)
 
 CK_RV C_Initialize(CK_C_INITIALIZE_ARGS *pInitArgs)
 {
-    (void)pInitArgs;
+    MODULE_GUARD();
+
+    if (pInitArgs) {
+        CK_FLAGS allowed = CKF_OS_LOCKING_OK;
+        CK_BBOOL has_mutex_callbacks =
+            (pInitArgs->CreateMutex != NULL_PTR) ||
+            (pInitArgs->DestroyMutex != NULL_PTR) ||
+            (pInitArgs->LockMutex != NULL_PTR) ||
+            (pInitArgs->UnlockMutex != NULL_PTR);
+
+        if (pInitArgs->pReserved != NULL_PTR)
+            return CKR_ARGUMENTS_BAD;
+        if ((pInitArgs->flags & ~allowed) != 0)
+            return CKR_ARGUMENTS_BAD;
+        /*
+         * This module currently supports OS mutexes only.
+         * App-supplied mutex callbacks are rejected for now.
+         */
+        if (has_mutex_callbacks)
+            return CKR_CANT_LOCK;
+    }
 
     if (g_initialized)
         return CKR_CRYPTOKI_ALREADY_INITIALIZED;
@@ -273,6 +323,8 @@ CK_RV C_Initialize(CK_C_INITIALIZE_ARGS *pInitArgs)
 
 CK_RV C_Finalize(void *pReserved)
 {
+    MODULE_GUARD();
+
     (void)pReserved;
     if (!g_initialized)
         return CKR_CRYPTOKI_NOT_INITIALIZED;
@@ -283,6 +335,8 @@ CK_RV C_Finalize(void *pReserved)
 
 CK_RV C_GetInfo(CK_INFO *pInfo)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!pInfo) return CKR_ARGUMENTS_BAD;
 
@@ -298,6 +352,8 @@ CK_RV C_GetInfo(CK_INFO *pInfo)
 
 CK_RV C_GetSlotList(CK_BBOOL tokenPresent, CK_SLOT_ID *pSlotList, CK_ULONG *pulCount)
 {
+    MODULE_GUARD();
+
     (void)tokenPresent;
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (!pulCount) return CKR_ARGUMENTS_BAD;
@@ -317,6 +373,8 @@ CK_RV C_GetSlotList(CK_BBOOL tokenPresent, CK_SLOT_ID *pSlotList, CK_ULONG *pulC
 
 CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO *pInfo)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (slotID != SLOT_ID) return CKR_SLOT_ID_INVALID;
     if (!pInfo) return CKR_ARGUMENTS_BAD;
@@ -331,6 +389,8 @@ CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO *pInfo)
 
 CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO *pInfo)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (slotID != SLOT_ID) return CKR_SLOT_ID_INVALID;
     if (!pInfo) return CKR_ARGUMENTS_BAD;
@@ -349,6 +409,8 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO *pInfo)
 
 CK_RV C_GetMechanismList(CK_SLOT_ID slotID, CK_MECHANISM_TYPE *pMechanismList, CK_ULONG *pulCount)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (slotID != SLOT_ID) return CKR_SLOT_ID_INVALID;
     if (!pulCount) return CKR_ARGUMENTS_BAD;
@@ -368,6 +430,8 @@ CK_RV C_GetMechanismList(CK_SLOT_ID slotID, CK_MECHANISM_TYPE *pMechanismList, C
 
 CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANISM_INFO *pInfo)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (slotID != SLOT_ID) return CKR_SLOT_ID_INVALID;
     if (!pInfo) return CKR_ARGUMENTS_BAD;
@@ -384,6 +448,8 @@ CK_RV C_GetMechanismInfo(CK_SLOT_ID slotID, CK_MECHANISM_TYPE type, CK_MECHANISM
 CK_RV C_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags, void *pApplication,
                      CK_NOTIFY notify, CK_SESSION_HANDLE *phSession)
 {
+    MODULE_GUARD();
+
     (void)pApplication;
     (void)notify;
 
@@ -401,6 +467,8 @@ CK_RV C_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags, void *pApplication,
 
 CK_RV C_CloseSession(CK_SESSION_HANDLE hSession)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -412,6 +480,8 @@ CK_RV C_CloseSession(CK_SESSION_HANDLE hSession)
 
 CK_RV C_CloseAllSessions(CK_SLOT_ID slotID)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (slotID != SLOT_ID) return CKR_SLOT_ID_INVALID;
     g_session_open = CK_FALSE;
@@ -422,6 +492,8 @@ CK_RV C_CloseAllSessions(CK_SLOT_ID slotID)
 
 CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO *pInfo)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -437,6 +509,8 @@ CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession, CK_SESSION_INFO *pInfo)
 CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
                CK_UTF8CHAR *pPin, CK_ULONG ulPinLen)
 {
+    MODULE_GUARD();
+
     (void)userType; (void)pPin; (void)ulPinLen;
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
@@ -447,6 +521,8 @@ CK_RV C_Login(CK_SESSION_HANDLE hSession, CK_USER_TYPE userType,
 
 CK_RV C_Logout(CK_SESSION_HANDLE hSession)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -457,6 +533,8 @@ CK_RV C_Logout(CK_SESSION_HANDLE hSession)
 
 CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -495,6 +573,8 @@ CK_RV C_FindObjectsInit(CK_SESSION_HANDLE hSession, CK_ATTRIBUTE *pTemplate, CK_
 CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE *phObject,
                      CK_ULONG ulMaxObjectCount, CK_ULONG *pulObjectCount)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -544,6 +624,8 @@ CK_RV C_FindObjects(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE *phObject,
 
 CK_RV C_FindObjectsFinal(CK_SESSION_HANDLE hSession)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -571,6 +653,8 @@ static CK_RV set_attr(CK_ATTRIBUTE *attr, const void *data, CK_ULONG len)
 CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
                            CK_ATTRIBUTE *pTemplate, CK_ULONG ulCount)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -737,6 +821,8 @@ static int der_ecdsa_to_flat(const uint8_t *der, size_t der_len,
 
 CK_RV C_SignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM *pMechanism, CK_OBJECT_HANDLE hKey)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;
@@ -767,6 +853,8 @@ CK_RV C_SignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM *pMechanism, CK_OBJECT
 CK_RV C_Sign(CK_SESSION_HANDLE hSession, CK_BYTE *pData, CK_ULONG ulDataLen,
               CK_BYTE *pSignature, CK_ULONG *pulSignatureLen)
 {
+    MODULE_GUARD();
+
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (hSession != SESSION_HANDLE || !g_session_open)
         return CKR_SESSION_HANDLE_INVALID;

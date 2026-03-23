@@ -54,6 +54,7 @@ typedef void CK_PTR CK_NOTIFY;
 #define CKR_BUFFER_TOO_SMALL            0x00000150
 #define CKR_CRYPTOKI_NOT_INITIALIZED    0x00000190
 #define CKR_CRYPTOKI_ALREADY_INITIALIZED 0x00000191
+#define CKR_CANT_LOCK                   0x0000000A
 #define CKR_DATA_INVALID                0x00000020
 #define CKR_DATA_LEN_RANGE              0x00000021
 #define CKR_DEVICE_ERROR                0x00000030
