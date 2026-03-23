@@ -58,8 +58,7 @@ export PKCS11_PROVIDER_MODULE=/usr/lib/pkcs11/rpifwcrypto-pkcs11.so
 ```
 openssl req -x509 -new -provider pkcs11 -provider default \
   -key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
-  -out cert.pem -days 365 -subj "/CN=RaspberryPi" \
-  -propquery "?provider=pkcs11"
+  -out cert.pem -days 365 -subj "/CN=RaspberryPi"
 ```
 
 ### Start a TLS server using the PKCS#11 key
@@ -67,8 +66,7 @@ openssl req -x509 -new -provider pkcs11 -provider default \
 ```
 openssl s_server -provider pkcs11 -provider default \
   -key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
-  -cert cert.pem -accept 4433 \
-  -propquery "?provider=pkcs11"
+  -cert cert.pem -accept 4433
 ```
 
 ## Notes
