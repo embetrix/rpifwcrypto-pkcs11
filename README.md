@@ -37,6 +37,16 @@ make
 make install
 ```
 
+## Key provisioning
+
+Before using this module, the OTP key must be provisioned on the Raspberry Pi:
+
+```sh
+rpi-fw-crypto genkey --key-id 1 --alg ec
+```
+
+> **Warning:** This is a one-time operation. Once written to OTP, the key cannot be changed or deleted.
+
 ## Example usage
 
 ### Generate a device certificate
