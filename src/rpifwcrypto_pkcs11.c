@@ -5,8 +5,8 @@
  *
  * rpifwcrypto PKCS#11 module
  *
- * Minimal PKCS#11 provider that exposes Raspberry Pi firmware OTP keys
- * for ECDSA P-256 signing. Works even when the device key is locked.
+ * Minimal PKCS#11 provider that exposes Raspberry Pi firmware OTP key
+ * for ECDSA P-256 signing
  *
  * Supported operations:
  *   - C_Sign with CKM_ECDSA (pre-hashed 32-byte SHA-256 digest)
@@ -15,7 +15,7 @@
  *
  * Usage with OpenSSL 3.x (pkcs11-provider):
  *   openssl req -x509 -new -provider pkcs11 -provider default \
- *     -key "pkcs11:token=RPi%20OTP%20Keys;id=%01;type=private" \
+ *     -key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
  *     -out cert.pem -days 365 -subj "/CN=device" \
  *     -propquery "?provider=pkcs11"
  */
@@ -396,7 +396,7 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO *pInfo)
     if (!pInfo) return CKR_ARGUMENTS_BAD;
 
     memset(pInfo, 0, sizeof(*pInfo));
-    pad_string(pInfo->label, "RPi OTP Keys", sizeof(pInfo->label));
+    pad_string(pInfo->label, "RPi OTP key", sizeof(pInfo->label));
     pad_string(pInfo->manufacturerID, "Raspberry Pi", sizeof(pInfo->manufacturerID));
     pad_string(pInfo->model, "BCM2712", sizeof(pInfo->model));
     pad_string(pInfo->serialNumber, "0000", sizeof(pInfo->serialNumber));
