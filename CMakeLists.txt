@@ -16,6 +16,8 @@ else()
     message(STATUS "System librpifwcrypto not found, building from 3rdparty/raspi-utils")
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     add_subdirectory(3rdparty/raspi-utils/rpifwcrypto)
+    # built as position-independent code.
+    set_target_properties(rpifwcrypto PROPERTIES POSITION_INDEPENDENT_CODE ON)
     set(RPIFWCRYPTO_TARGET rpifwcrypto)
     set(RPIFWCRYPTO_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/raspi-utils/rpifwcrypto)
 endif()
