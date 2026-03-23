@@ -1,22 +1,17 @@
 # rpifwcrypto-pkcs11
 
-PKCS#11 module that exposes Raspberry Pi firmware OTP ECDSA keys through the PKCS#11 interface.
+PKCS#11 module that exposes the Raspberry Pi firmware OTP ECDSA unique secure stored key through the PKCS#11 interface.
 
-This project wraps `librpifwcrypto` from Raspberry Pi's `raspi-utils` project, allowing OpenSSL, p11-kit, and other PKCS#11 consumers to use hardware-backed OTP keys without exporting private key material.
+The Raspberry Pi OTP stores a single ECDSA key (ID 1). This project wraps `librpifwcrypto` from Raspberry Pi's `raspi-utils` project, allowing OpenSSL, p11-kit and other PKCS#11 consumers to use this hardware-backed key without exporting private key material.
 
 ## Features
 
-- Exposes Raspberry Pi OTP ECDSA private and public keys as PKCS#11 objects
-- Supports `CKM_ECDSA` signing with firmware-backed keys
+- Exposes the single Raspberry Pi OTP ECDSA key (ID 1) as PKCS#11 private and public key objects
+- Supports `CKM_ECDSA` signing with firmware-backed key
 - Returns public key material through `CKA_EC_POINT`
-- Filters out unprovisioned key slots automatically
-- Works with locked device keys
+- No PIN required
+- Works with locked device key
 
-## License
-
-This project is licensed under GPL-3.0-or-later.
-
-It links against `librpifwcrypto`, which is provided under the BSD 3-Clause License. See `THIRD-PARTY-NOTICES` for details.
 
 ## Build requirements
 
@@ -36,42 +31,43 @@ cmake ..
 make
 ```
 
-If you already cloned without `--recursive`:
-
-```sh
-git submodule update --init
-```
-
 ## Install
 
 ```sh
 make install
 ```
 
-By default this installs:
-
-- `rpifwcrypto-pkcs11.so` to `${CMAKE_INSTALL_LIBDIR}/pkcs11`
-- `rpifwcrypto.module` to `${CMAKE_INSTALL_DATADIR}/p11-kit/modules`
-
-You can override these with:
-
-```sh
-cmake -DPKCS11_MODULE_DIR=/usr/lib/pkcs11 -DP11KIT_MODULE_DIR=/usr/share/p11-kit/modules ..
-```
-
 ## Example usage
 
-```sh
+### Generate a device certificate
+
+```
 export PKCS11_PROVIDER_MODULE=/usr/lib/pkcs11/rpifwcrypto-pkcs11.so
-openssl req -x509 -new \
-  -provider pkcs11 -provider default \
-  -key "pkcs11:token=RPi%20OTP%20Keys;id=%01;type=private" \
+```
+
+```
+openssl req -x509 -new -provider pkcs11 -provider default \
+  -key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
   -out cert.pem -days 365 -subj "/CN=RaspberryPi" \
+  -propquery "?provider=pkcs11"
+```
+
+### Start a TLS server using the PKCS#11 key
+
+```
+openssl s_server -provider pkcs11 -provider default \
+  -key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
+  -cert cert.pem -accept 4433 \
   -propquery "?provider=pkcs11"
 ```
 
 ## Notes
 
-- Firmware key IDs are treated as 1-based IDs.
-- If a key slot is present but not provisioned, it is skipped and not exposed as a PKCS#11 object.
+- The OTP contains a single ECDSA key with ID 1.
 - Debug logging can be enabled with `RPIFWCRYPTO_PKCS11_DEBUG=1`.
+
+## License
+
+This project is licensed under GPL-3.0-or-later.
+
+It links against `librpifwcrypto`, which is provided under the BSD 3-Clause License. See `THIRD-PARTY-NOTICES` for details.
