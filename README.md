@@ -101,6 +101,30 @@ openssl s_server -provider pkcs11 -provider default \
   -cert cert.pem -accept 4433
 ```
 
+### Use with curl
+
+**curl with OpenSSL legacy engine support:**
+
+```
+export PKCS11_MODULE_PATH=/usr/lib/pkcs11/rpifwcrypto-pkcs11.so
+
+curl --engine pkcs11 --key-type ENG \
+  --key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
+  --cert cert.pem \
+  https://example.com
+```
+
+**curl 8.13+ with OpenSSL provider support:**
+
+```
+export PKCS11_PROVIDER_MODULE=/usr/lib/pkcs11/rpifwcrypto-pkcs11.so
+
+curl --ssl-provider pkcs11 --ssl-provider default \
+  --key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
+  --cert cert.pem \
+  https://example.com
+```
+
 ## Notes
 
 - The OTP contains a single ECDSA key with ID 1.
