@@ -2,7 +2,7 @@
 
 PKCS#11 module that exposes the Raspberry Pi firmware OTP ECDSA unique secure stored key through the PKCS#11 interface.
 
-The Raspberry Pi OTP stores a single ECDSA key (ID 1). This project wraps `librpifwcrypto` from Raspberry Pi's `raspi-utils` project, allowing OpenSSL, p11-kit and other PKCS#11 consumers to use this hardware-backed key without exporting private key material.
+The Raspberry Pi OTP stores a single ECDSA key (ID 1). This project wraps `librpifwcrypto` from Raspberry Pi's [raspi-utils](https://github.com/raspberrypi/utils) project, allowing OpenSSL, p11-kit and other PKCS#11 consumers to use this hardware-backed key without exporting private key material.
 
 ## Features
 
@@ -55,7 +55,9 @@ The Raspberry Pi OTP stores a single ECDSA key (ID 1). This project wraps `librp
 
 ## Build
 
-The build automatically detects whether `librpifwcrypto` is installed on the system. If found, it links against the system library. Otherwise, it builds `librpifwcrypto` statically from the bundled `raspi-utils` submodule.
+The build automatically detects whether `librpifwcrypto` is installed on the system. If found, it links against the system library. Otherwise, it builds `librpifwcrypto` statically from the bundled [raspi-utils](https://github.com/raspberrypi/utils) submodule.
+
+### Native build (on the Raspberry Pi)
 
 ```sh
 git clone --recursive https://github.com/embetrix/rpifwcrypto-pkcs11.git
@@ -64,6 +66,20 @@ mkdir build && cd build
 cmake ..
 make
 ```
+
+### Cross-compilation
+
+```sh
+git clone --recursive https://github.com/embetrix/rpifwcrypto-pkcs11.git
+cd rpifwcrypto-pkcs11
+mkdir build && cd build
+cmake .. \
+  -DCMAKE_TOOLCHAIN_FILE=/path/to/aarch64-linux-gnu.cmake \
+  -DCMAKE_SYSROOT=/path/to/rpi-sysroot
+make
+```
+
+Where the toolchain file sets `CMAKE_C_COMPILER` to your cross-compiler (e.g. `aarch64-linux-gnu-gcc`) and the sysroot contains the target's GnuTLS headers and libraries.
 
 ## Install
 
