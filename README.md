@@ -1,6 +1,7 @@
 # rpifwcrypto-pkcs11
 
-[![CI](https://github.com/embetrix/rpifwcrypto-pkcs11/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/embetrix/rpifwcrypto-pkcs11/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/embetrix/rpifwcrypto-pkcs11/ci.yml?branch=master&event=push&label=CI)](https://github.com/embetrix/rpifwcrypto-pkcs11/actions/workflows/ci.yml)
+
 
 PKCS#11 module that exposes the Raspberry Pi firmware OTP ECDSA unique secure stored key through the PKCS#11 interface.
 

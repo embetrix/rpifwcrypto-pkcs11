@@ -23,6 +23,7 @@ jobs:
             --enable=warning,style,performance,portability \
             --error-exitcode=1 \
             --quiet \
+            --suppress=constParameterCallback \
             --suppress=missingIncludeSystem \
             -Isrc \
             -I3rdparty/raspi-utils/rpifwcrypto \

@@ -86,7 +86,7 @@ static void module_unlock(void)
 
 typedef int module_lock_guard;
 
-static void module_lock_guard_release(module_lock_guard *guard)
+static void module_lock_guard_release(const module_lock_guard *guard)
 {
     if (*guard)
         module_unlock();
@@ -144,8 +144,6 @@ static struct {
     CK_BBOOL active;
     uint32_t key_id;
     CK_MECHANISM_TYPE mech;
-    uint8_t  hash_buf[32];
-    size_t   hash_len;
 } g_sign;
 
 /* --- Helpers ------------------------------------------------------------- */
@@ -154,6 +152,47 @@ static struct {
 static const CK_BYTE ec_params_p256[] = {
     0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07
 };
+
+static int der_read_tag(const uint8_t *buf, size_t buf_len, size_t *pos, uint8_t tag)
+{
+    if (*pos >= buf_len)
+        return -1;
+    if (buf[*pos] != tag)
+        return -1;
+
+    (*pos)++;
+    return 0;
+}
+
+static int der_read_length(const uint8_t *buf, size_t buf_len, size_t *pos, size_t *value)
+{
+    if (*pos >= buf_len)
+        return -1;
+
+    uint8_t first = buf[*pos];
+    (*pos)++;
+
+    if ((first & 0x80) == 0) {
+        *value = first;
+        return *value <= buf_len - *pos ? 0 : -1;
+    }
+
+    size_t len_bytes = (size_t)(first & 0x7f);
+    if (len_bytes == 0 || len_bytes > sizeof(size_t) || buf_len - *pos < len_bytes)
+        return -1;
+
+    size_t length = 0;
+    for (size_t i = 0; i < len_bytes; i++) {
+        length = (length << 8) | buf[*pos];
+        (*pos)++;
+    }
+
+    if (length > buf_len - *pos)
+        return -1;
+
+    *value = length;
+    return 0;
+}
 
 static void pad_string(CK_UTF8CHAR *dst, const char *src, size_t len)
 {
@@ -173,33 +212,40 @@ static int extract_ec_point(const uint8_t *spki, size_t spki_len,
 {
     /* Walk the SPKI to find the BIT STRING containing the EC point */
     size_t pos = 0;
+    size_t seq_len;
+    size_t alg_len;
+    size_t bs_len;
 
     /* Outer SEQUENCE */
-    if (pos >= spki_len || spki[pos] != 0x30) return -1;
-    pos++;
-    /* Skip length (may be 1 or 2 bytes) */
-    if (pos >= spki_len) return -1;
-    if (spki[pos] & 0x80) pos += (spki[pos] & 0x7f) + 1; else pos++;
+    if (der_read_tag(spki, spki_len, &pos, 0x30) != 0)
+        return -1;
+    if (der_read_length(spki, spki_len, &pos, &seq_len) != 0)
+        return -1;
 
     /* Inner SEQUENCE (algorithm identifier) */
-    if (pos >= spki_len || spki[pos] != 0x30) return -1;
-    pos++;
-    if (pos >= spki_len) return -1;
-    size_t alg_len = spki[pos]; pos++;
+    if (der_read_tag(spki, spki_len, &pos, 0x30) != 0)
+        return -1;
+    if (der_read_length(spki, spki_len, &pos, &alg_len) != 0)
+        return -1;
+    if (spki_len - pos < alg_len)
+        return -1;
     pos += alg_len; /* skip algorithm identifier contents */
 
     /* BIT STRING */
-    if (pos >= spki_len || spki[pos] != 0x03) return -1;
-    pos++;
-    if (pos >= spki_len) return -1;
-    size_t bs_len = spki[pos]; pos++;
-    if (pos >= spki_len) return -1;
+    if (der_read_tag(spki, spki_len, &pos, 0x03) != 0)
+        return -1;
+    if (der_read_length(spki, spki_len, &pos, &bs_len) != 0)
+        return -1;
+    if (bs_len == 0 || pos >= spki_len)
+        return -1;
     /* Skip unused-bits byte (should be 0) */
+    if (spki[pos] != 0x00)
+        return -1;
     pos++;
     bs_len--;
 
     /* bs_len should be 65 for uncompressed P-256 (04 || x || y) */
-    if (bs_len != 65 || pos + bs_len > spki_len)
+    if (bs_len != 65 || spki_len - pos < bs_len)
         return -1;
 
     /* Wrap in OCTET STRING: tag 0x04, length, then the point */
@@ -778,30 +824,27 @@ static int der_ecdsa_to_flat(const uint8_t *der, size_t der_len,
                             uint8_t *flat, size_t flat_max, size_t *flat_len)
 {
     const size_t int_sz = 32; /* P-256 order size */
+    size_t seq_len;
     if (flat_max < int_sz * 2)
         return -1;
 
     size_t pos = 0;
     /* SEQUENCE */
-    if (pos >= der_len || der[pos] != 0x30) return -1;
-    pos++;
-    if (pos >= der_len) return -1;
-    /* Skip SEQUENCE length */
-    if (der[pos] & 0x80) {
-        size_t ll = der[pos] & 0x7f;
-        pos += 1 + ll;
-    } else {
-        pos++;
-    }
+    if (der_read_tag(der, der_len, &pos, 0x30) != 0)
+        return -1;
+    if (der_read_length(der, der_len, &pos, &seq_len) != 0)
+        return -1;
 
     memset(flat, 0, int_sz * 2);
 
     for (int i = 0; i < 2; i++) {
-        if (pos >= der_len || der[pos] != 0x02) return -1;
-        pos++;
-        if (pos >= der_len) return -1;
-        size_t ilen = der[pos]; pos++;
-        if (pos + ilen > der_len) return -1;
+        size_t ilen;
+        if (der_read_tag(der, der_len, &pos, 0x02) != 0)
+            return -1;
+        if (der_read_length(der, der_len, &pos, &ilen) != 0)
+            return -1;
+        if (der_len - pos < ilen)
+            return -1;
 
         const uint8_t *val = der + pos;
         size_t vlen = ilen;
@@ -844,7 +887,6 @@ CK_RV C_SignInit(CK_SESSION_HANDLE hSession, CK_MECHANISM *pMechanism, CK_OBJECT
 
     g_sign.key_id = (uint32_t)key_id;
     g_sign.mech = pMechanism->mechanism;
-    g_sign.hash_len = 0;
     g_sign.active = CK_TRUE;
 
     DBG("C_SignInit: key_id=%d OK", key_id);
