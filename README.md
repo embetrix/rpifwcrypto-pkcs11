@@ -147,6 +147,15 @@ The firmware internally returns a DER-encoded `ECDSA-Sig-Value`; the module conv
 
 > **Common pitfall**: passing raw data instead of a hash, or expecting a DER-encoded signature back. OpenSSL's pkcs11-provider handles this correctly when using `CKM_ECDSA`, but custom code must pre-hash with SHA-256 and expect the 64-byte flat output.
 
+## Hardware Compatibility
+
+| Board | SoC | Support |
+|-------|-----|---------|
+| Raspberry Pi 5 | BCM2712 | Supported* |
+| Raspberry Pi 4 Model B | BCM2711 | Supported* |
+
+> **Note:** Update the EEPROM firmware to the latest version to ensure OTP crypto support is available: `rpi-eeprom-update -a`
+
 ## License
 
 This project is licensed under GPL-3.0-or-later.
