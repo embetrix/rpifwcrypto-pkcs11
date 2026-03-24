@@ -1,5 +1,7 @@
 # rpifwcrypto-pkcs11
 
+[![CI](https://github.com/embetrix/rpifwcrypto-pkcs11/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/embetrix/rpifwcrypto-pkcs11/actions/workflows/ci.yml)
+
 PKCS#11 module that exposes the Raspberry Pi firmware OTP ECDSA unique secure stored key through the PKCS#11 interface.
 
 The Raspberry Pi OTP stores a single ECDSA key (ID 1). This project wraps `librpifwcrypto` from Raspberry Pi's [raspi-utils](https://github.com/raspberrypi/utils) project, allowing OpenSSL, p11-kit and other PKCS#11 consumers to use this hardware-backed key without exporting private key material.
