@@ -49,11 +49,15 @@ rpi-fw-crypto genkey --key-id 1 --alg ec
 
 ## Example usage
 
-### Generate a device certificate
+### Extract public key
 
 ```
-export PKCS11_PROVIDER_MODULE=/usr/lib/pkcs11/rpifwcrypto-pkcs11.so
+openssl pkey -provider pkcs11 -provider default \
+  -in "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
+  -pubout -out pubkey.pem
 ```
+
+### Generate a device self-signed certificate
 
 ```
 openssl req -x509 -new -provider pkcs11 -provider default \
