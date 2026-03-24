@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y cmake cppcheck libgnutls28-dev
+
+      - name: Cppcheck
+        run: |
+          cppcheck \
+            --enable=warning,style,performance,portability \
+            --error-exitcode=1 \
+            --quiet \
+            --suppress=missingIncludeSystem \
+            -Isrc \
+            -I3rdparty/raspi-utils/rpifwcrypto \
+            src
+
+      - name: Configure
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build
+
