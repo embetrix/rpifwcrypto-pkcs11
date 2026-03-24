@@ -104,8 +104,8 @@ static void module_lock_guard_release(module_lock_guard *guard)
 /* We support one slot (0), one session at a time */
 #define SLOT_ID         0
 #define SESSION_HANDLE  1
-#define MAX_OBJECTS     16  /* max OTP key slots */
-#define MAX_SCAN        16  /* max key IDs to probe */
+#define MAX_OBJECTS     1  /* max OTP key slots */
+#define MAX_SCAN        1  /* max key IDs to probe */
 
 static CK_BBOOL g_session_open = CK_FALSE;
 
@@ -343,8 +343,8 @@ CK_RV C_GetInfo(CK_INFO *pInfo)
     memset(pInfo, 0, sizeof(*pInfo));
     pInfo->cryptokiVersion.major = 2;
     pInfo->cryptokiVersion.minor = 40;
-    pad_string(pInfo->manufacturerID, "Raspberry Pi", sizeof(pInfo->manufacturerID));
-    pad_string(pInfo->libraryDescription, "rpifwcrypto PKCS#11", sizeof(pInfo->libraryDescription));
+    pad_string(pInfo->manufacturerID, "RaspberryPi", sizeof(pInfo->manufacturerID));
+    pad_string(pInfo->libraryDescription, "rpifwcrypto PKCS#11 token", sizeof(pInfo->libraryDescription));
     pInfo->libraryVersion.major = 1;
     pInfo->libraryVersion.minor = 0;
     return CKR_OK;
@@ -398,9 +398,9 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO *pInfo)
     memset(pInfo, 0, sizeof(*pInfo));
     pad_string(pInfo->label, "RPi OTP key", sizeof(pInfo->label));
     pad_string(pInfo->manufacturerID, "Raspberry Pi", sizeof(pInfo->manufacturerID));
-    pad_string(pInfo->model, "BCM2712", sizeof(pInfo->model));
+    pad_string(pInfo->model, "Raspberry Pi", sizeof(pInfo->model));
     pad_string(pInfo->serialNumber, "0000", sizeof(pInfo->serialNumber));
-    pInfo->flags = CKF_TOKEN_INITIALIZED | CKF_PROTECTED_AUTHENTICATION_PATH;
+    pInfo->flags = CKF_TOKEN_INITIALIZED;
     pInfo->ulMaxSessionCount = 1;
     pInfo->ulMaxRwSessionCount = 1;
     pInfo->hardwareVersion.major = 1;
@@ -455,8 +455,9 @@ CK_RV C_OpenSession(CK_SLOT_ID slotID, CK_FLAGS flags, void *pApplication,
 
     if (!g_initialized) return CKR_CRYPTOKI_NOT_INITIALIZED;
     if (slotID != SLOT_ID) return CKR_SLOT_ID_INVALID;
-    if (!(flags & CKF_SERIAL_SESSION)) return CKR_FUNCTION_FAILED;
+    if (!(flags & CKF_SERIAL_SESSION)) return CKR_SESSION_PARALLEL_NOT_SUPPORTED;
     if (!phSession) return CKR_ARGUMENTS_BAD;
+    if (g_session_open) return CKR_SESSION_COUNT;
 
     g_session_open = CK_TRUE;
     g_find.active = CK_FALSE;
@@ -717,7 +718,7 @@ CK_RV C_GetAttributeValue(CK_SESSION_HANDLE hSession, CK_OBJECT_HANDLE hObject,
             break;
         }
         case CKA_SENSITIVE: {
-            CK_BBOOL v = CK_TRUE;
+            CK_BBOOL v = is_priv ? CK_TRUE : CK_FALSE;
             attr_rv = set_attr(&pTemplate[i], &v, sizeof(v));
             break;
         }
@@ -1035,7 +1036,7 @@ static CK_FUNCTION_LIST function_list = {
     .C_GenerateKeyPair = NULL,
     .C_WrapKey = C_WrapKey,
     .C_UnwrapKey = C_UnwrapKey,
-    .C_DeriveKey = NULL,
+    .C_DeriveKey = C_DeriveKey,
     .C_SeedRandom = C_SeedRandom,
     .C_GenerateRandom = C_GenerateRandom,
     .C_GetFunctionStatus = C_GetFunctionStatus,

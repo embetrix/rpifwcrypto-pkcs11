@@ -74,6 +74,17 @@ openssl s_server -provider pkcs11 -provider default \
 - The OTP contains a single ECDSA key with ID 1.
 - Debug logging can be enabled with `RPIFWCRYPTO_PKCS11_DEBUG=1`.
 
+## ECDSA signing format
+
+This module implements **`CKM_ECDSA`** only (not `CKM_ECDSA_SHA256`). The caller must hash the data **before** calling `C_Sign`:
+
+- **Input**:  32 bytes  a pre-computed SHA-256 digest.
+- **Output**: 64 bytes flat `r || s` format (each integer zero-padded to 32 bytes).
+
+The firmware internally returns a DER-encoded `ECDSA-Sig-Value`; the module converts it to the flat r||s format that PKCS#11 `CKM_ECDSA` requires.
+
+> **Common pitfall**: passing raw data instead of a hash, or expecting a DER-encoded signature back. OpenSSL's pkcs11-provider handles this correctly when using `CKM_ECDSA`, but custom code must pre-hash with SHA-256 and expect the 64-byte flat output.
+
 ## License
 
 This project is licensed under GPL-3.0-or-later.
