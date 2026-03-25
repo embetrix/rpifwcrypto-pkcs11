@@ -100,6 +100,14 @@ rpi-fw-crypto genkey --key-id 1 --alg ec
 
 > **Warning:** This is a one-time operation. Once written to OTP, the key cannot be changed or deleted.
 
+After provisioning, the key should be immediately locked to prevent read-backl by add the following to `/boot/config.txt`:
+
+```ini
+lock_device_private_key=1
+```
+
+> **Recommendation:** Lock the device private key and enable secure boot as part of the factory provisioning process to ensure the key cannot be tampered with and only signed firmware can run after deployment.
+
 ## Example usage
 
 ### Extract public key
