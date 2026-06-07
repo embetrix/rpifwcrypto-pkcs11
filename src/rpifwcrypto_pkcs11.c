@@ -322,7 +322,7 @@ CK_RV C_Initialize(CK_C_INITIALIZE_ARGS *pInitArgs)
     if (g_initialized)
         return CKR_CRYPTOKI_ALREADY_INITIALIZED;
 
-    DBG("C_Initialize: opening /dev/vcio");
+    DBG("C_Initialize: opening /dev/vcio_crypto");
     int n = rpi_fw_crypto_get_num_otp_keys();
     DBG("C_Initialize: get_num_otp_keys returned %d", n);
     if (n < 0) {

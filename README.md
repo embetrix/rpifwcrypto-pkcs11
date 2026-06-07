@@ -37,7 +37,7 @@ The Raspberry Pi OTP stores a single ECDSA key (ID 1). This project wraps `librp
 └───────────────┬───────────────┘
                 ▼
 ┌───────────────────────────────┐
-│      mailbox (/dev/vcio)      │
+|  mailbox (/dev/vcio_crypto)   │
 └───────────────┬───────────────┘
                 ▼
 ┌───────────────────────────────┐
