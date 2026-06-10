@@ -152,7 +152,7 @@ curl --engine pkcs11 --key-type ENG \
 ```
 export PKCS11_PROVIDER_MODULE=/usr/lib/pkcs11/rpifwcrypto-pkcs11.so
 
-curl --ssl-provider pkcs11 --ssl-provider default \
+curl --key-type PROV \
   --key "pkcs11:token=RPi%20OTP%20key;id=%01;type=private" \
   --cert cert.pem \
   https://example.com
